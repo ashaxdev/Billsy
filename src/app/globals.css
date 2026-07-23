@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+:root {
+  --color-paper: #f1ede2;
+  --color-paper-2: #e8e2d2;
+  --color-ink: #16202b;
+  --color-ink-2: #2b3a4a;
+  --color-signal: #1f7a5c;
+  --color-signal-light: #e6f2ec;
+  --color-amber: #dd9a35;
+  --color-amber-light: #faedd6;
+  --color-slate: #64707d;
+  --color-line: #d8d1bf;
+  --color-danger: #b1493a;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-paper-2: var(--color-paper-2);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-signal: var(--color-signal);
+  --color-signal-light: var(--color-signal-light);
+  --color-amber: var(--color-amber);
+  --color-amber-light: var(--color-amber-light);
+  --color-slate: var(--color-slate);
+  --color-line: var(--color-line);
+  --color-danger: var(--color-danger);
+  --font-display: var(--font-space-grotesk);
+  --font-body: var(--font-inter);
+  --font-data: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), sans-serif;
+}
+
+.font-data {
+  font-family: var(--font-data), monospace;
+}
+
+/* Signature element: torn receipt edge, used on receipt & pricing cards */
+.receipt-edge-top {
+  clip-path: polygon(
+    0% 6px, 3% 0, 6% 6px, 9% 0, 12% 6px, 15% 0, 18% 6px, 21% 0, 24% 6px, 27% 0,
+    30% 6px, 33% 0, 36% 6px, 39% 0, 42% 6px, 45% 0, 48% 6px, 51% 0, 54% 6px, 57% 0,
+    60% 6px, 63% 0, 66% 6px, 69% 0, 72% 6px, 75% 0, 78% 6px, 81% 0, 84% 6px, 87% 0,
+    90% 6px, 93% 0, 96% 6px, 99% 0, 100% 6px,
+    100% 100%, 0 100%
+  );
+}
+
+.receipt-edge-bottom {
+  clip-path: polygon(
+    0 0, 100% 0, 100% calc(100% - 6px),
+    99% 100%, 96% calc(100% - 6px), 93% 100%, 90% calc(100% - 6px), 87% 100%, 84% calc(100% - 6px),
+    81% 100%, 78% calc(100% - 6px), 75% 100%, 72% calc(100% - 6px), 69% 100%, 66% calc(100% - 6px),
+    63% 100%, 60% calc(100% - 6px), 57% 100%, 54% calc(100% - 6px), 51% 100%, 48% calc(100% - 6px),
+    45% 100%, 42% calc(100% - 6px), 39% 100%, 36% calc(100% - 6px), 33% 100%, 30% calc(100% - 6px),
+    27% 100%, 24% calc(100% - 6px), 21% 100%, 18% calc(100% - 6px), 15% 100%, 12% calc(100% - 6px),
+    9% 100%, 6% calc(100% - 6px), 3% 100%, 0% calc(100% - 6px)
+  );
+}
+
+/* Decorative barcode stripe divider — a stylised repeating pattern, not scannable */
+.barcode-stripe {
+  height: 28px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--color-ink) 0px,
+    var(--color-ink) 2px,
+    transparent 2px,
+    transparent 5px,
+    var(--color-ink) 5px,
+    var(--color-ink) 6px,
+    transparent 6px,
+    transparent 10px,
+    var(--color-ink) 10px,
+    var(--color-ink) 13px,
+    transparent 13px,
+    transparent 16px
+  );
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

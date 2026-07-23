@@ -1,0 +1,323 @@
+"use client";
+
+import { useState, useRef } from "react";
+import Link from "next/link";
+import toast from "react-hot-toast";
+import BarcodeScanner from "@/components/BarcodeScanner";
+import { formatINR, whatsappShareUrl } from "@/lib/utils";
+
+interface CartItem {
+  productId?: string;
+  name: string;
+  barcode: string;
+  price: number;
+  qty: number;
+}
+
+interface CreatedOrder {
+  _id: string;
+  receiptNumber: string;
+  total: number;
+}
+
+export default function BillingCounter() {
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<
+    { _id: string; name: string; price: number; barcode: string; stock: number }[]
+  >([]);
+  const [taxPercent, setTaxPercent] = useState("0");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "other">("cash");
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<CreatedOrder | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function addToCart(item: {
+    _id?: string;
+    name: string;
+    price: number;
+    barcode: string;
+  }) {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.barcode === item.barcode);
+      if (existing) {
+        return prev.map((i) => (i.barcode === item.barcode ? { ...i, qty: i.qty + 1 } : i));
+      }
+      return [...prev, { productId: item._id, name: item.name, price: item.price, barcode: item.barcode, qty: 1 }];
+    });
+  }
+
+  async function handleScan(barcode: string) {
+    const res = await fetch(`/api/products/${barcode}`);
+    if (!res.ok) {
+      toast.error(`No product with barcode ${barcode}`);
+      return;
+    }
+    const { product } = await res.json();
+    addToCart(product);
+    toast.success(`${product.name} added`);
+  }
+
+  function updateSearch(value: string) {
+    setSearchTerm(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!value.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      const res = await fetch(`/api/products?q=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (res.ok) setSearchResults(data.products.slice(0, 6));
+    }, 250);
+  }
+
+  function updateQty(barcode: string, delta: number) {
+    setCart((prev) =>
+      prev
+        .map((i) => (i.barcode === barcode ? { ...i, qty: i.qty + delta } : i))
+        .filter((i) => i.qty > 0)
+    );
+  }
+
+  const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const tax = +(subtotal * (parseFloat(taxPercent || "0") / 100)).toFixed(2);
+  const total = +(subtotal + tax).toFixed(2);
+
+  async function handleCheckout() {
+    if (cart.length === 0) {
+      toast.error("Add at least one item first.");
+      return;
+    }
+    setCheckingOut(true);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: cart,
+          taxPercent: parseFloat(taxPercent || "0"),
+          customerName: customerName || undefined,
+          customerPhone: customerPhone || undefined,
+          paymentMode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCompletedOrder(data.order);
+      toast.success("Receipt generated!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setCheckingOut(false);
+    }
+  }
+
+  function startNewBill() {
+    setCart([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setTaxPercent("0");
+    setCompletedOrder(null);
+  }
+
+  if (completedOrder) {
+    const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const receiptUrl = `${siteUrl}/receipt/${completedOrder._id}`;
+    return (
+      <div className="mx-auto max-w-md">
+        <div className="receipt-edge-top receipt-edge-bottom border border-line bg-white p-7 text-center">
+          <p className="font-data text-xs uppercase tracking-wide text-slate">
+            {completedOrder.receiptNumber}
+          </p>
+          <h1 className="font-display mt-2 text-2xl font-bold text-ink">Bill complete</h1>
+          <p className="font-data mt-1 text-3xl font-bold text-signal">
+            {formatINR(completedOrder.total)}
+          </p>
+
+          <div className="mt-6 flex flex-col gap-3">
+            {customerPhone && (
+              <a
+                href={whatsappShareUrl(
+                  customerPhone,
+                  `Here's your receipt from us: ${receiptUrl}`
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90"
+              >
+                Share on WhatsApp
+              </a>
+            )}
+            <Link
+              href={`/receipt/${completedOrder._id}`}
+              target="_blank"
+              className="rounded-full border border-line py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2"
+            >
+              View receipt
+            </Link>
+            <button
+              onClick={startNewBill}
+              className="rounded-full bg-ink py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
+            >
+              Start next bill
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink">Bill now</h1>
+          <p className="mt-1 text-sm text-ink-2">Scan or search products to build the cart.</p>
+        </div>
+        <button
+          onClick={() => setScanning(true)}
+          className="rounded-full bg-amber px-5 py-2.5 text-sm font-semibold text-ink hover:opacity-90"
+        >
+          Scan barcode
+        </button>
+      </div>
+
+      <div className="relative mt-5">
+        <input
+          value={searchTerm}
+          onChange={(e) => updateSearch(e.target.value)}
+          placeholder="Search product by name or barcode…"
+          className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+        />
+        {searchResults.length > 0 && (
+          <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-line bg-white shadow-lg">
+            {searchResults.map((p) => (
+              <button
+                key={p._id}
+                onClick={() => {
+                  addToCart(p);
+                  setSearchTerm("");
+                  setSearchResults([]);
+                }}
+                className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm hover:bg-paper-2"
+              >
+                <span>{p.name}</span>
+                <span className="font-data text-signal">{formatINR(p.price)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+        <div className="rounded-2xl border border-line bg-white">
+          {cart.length === 0 ? (
+            <p className="p-8 text-center text-sm text-slate">
+              Cart is empty — scan or search a product to begin.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {cart.map((item) => (
+                <li key={item.barcode} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+                    <p className="font-data text-xs text-slate">{formatINR(item.price)} each</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateQty(item.barcode, -1)}
+                      className="h-7 w-7 rounded-full border border-line text-sm hover:bg-paper-2"
+                    >
+                      −
+                    </button>
+                    <span className="font-data w-5 text-center text-sm">{item.qty}</span>
+                    <button
+                      onClick={() => updateQty(item.barcode, 1)}
+                      className="h-7 w-7 rounded-full border border-line text-sm hover:bg-paper-2"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="font-data w-20 shrink-0 text-right text-sm font-semibold text-ink">
+                    {formatINR(item.price * item.qty)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-line bg-white p-5">
+          <div className="space-y-3">
+            <input
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Customer name (optional)"
+              className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+            />
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              placeholder="Customer WhatsApp number"
+              className="w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+            />
+            <div className="flex gap-3">
+              <input
+                type="number"
+                min="0"
+                value={taxPercent}
+                onChange={(e) => setTaxPercent(e.target.value)}
+                placeholder="Tax %"
+                className="w-24 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+              />
+              <select
+                value={paymentMode}
+                onChange={(e) => setPaymentMode(e.target.value as typeof paymentMode)}
+                className="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+              >
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="card">Card</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="font-data mt-5 space-y-1.5 border-t border-dashed border-line pt-4 text-sm">
+            <div className="flex justify-between text-ink-2">
+              <span>Subtotal</span>
+              <span>{formatINR(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-ink-2">
+              <span>Tax</span>
+              <span>{formatINR(tax)}</span>
+            </div>
+            <div className="flex justify-between text-base font-bold text-ink">
+              <span>Total</span>
+              <span>{formatINR(total)}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleCheckout}
+            disabled={checkingOut}
+            className="mt-5 w-full rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
+          >
+            {checkingOut ? "Generating receipt…" : "Generate receipt"}
+          </button>
+        </div>
+      </div>
+
+      {scanning && (
+        <BarcodeScanner
+          onScan={(value) => handleScan(value)}
+          onClose={() => setScanning(false)}
+        />
+      )}
+    </div>
+  );
+}
