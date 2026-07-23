@@ -15,6 +15,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ orders });
 }
 
+type DiscountType = "percent" | "flat";
+
+function lineDiscountAmount(item: { price: number; qty: number; discountType?: DiscountType; discountValue?: number }) {
+  const lineGross = item.price * item.qty;
+  const value = item.discountValue || 0;
+  const raw = item.discountType === "flat" ? value * item.qty : (lineGross * value) / 100;
+  return Math.min(Math.max(raw, 0), lineGross);
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,24 +31,48 @@ export async function POST(req: NextRequest) {
   await dbConnect();
   const businessId = (session.user as { id: string }).id;
   const body = await req.json();
-  const { items, taxPercent = 0, customerName, customerPhone, paymentMode = "cash" } = body;
+  const {
+    items,
+    taxPercent = 0,
+    billDiscountType = "percent",
+    billDiscountValue = 0,
+    customerName,
+    customerPhone,
+    paymentMode = "cash",
+  } = body;
 
   if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
   }
 
-  const subtotal = items.reduce(
-    (sum: number, it: { price: number; qty: number }) => sum + it.price * it.qty,
+  // Recompute everything server-side rather than trusting client-sent totals.
+  const grossSubtotal = items.reduce((sum: number, it: { price: number; qty: number }) => sum + it.price * it.qty, 0);
+
+  const itemDiscountsTotal = items.reduce(
+    (sum: number, it: { price: number; qty: number; discountType?: DiscountType; discountValue?: number }) =>
+      sum + lineDiscountAmount(it),
     0
   );
-  const taxAmount = +(subtotal * (taxPercent / 100)).toFixed(2);
-  const total = +(subtotal + taxAmount).toFixed(2);
+
+  const afterItemDiscounts = grossSubtotal - itemDiscountsTotal;
+
+  const billDiscountRaw =
+    billDiscountType === "flat" ? billDiscountValue : (afterItemDiscounts * billDiscountValue) / 100;
+  const billDiscountAmount = +Math.min(Math.max(billDiscountRaw, 0), afterItemDiscounts).toFixed(2);
+
+  const taxableAmount = Math.max(afterItemDiscounts - billDiscountAmount, 0);
+  const taxAmount = +(taxableAmount * (taxPercent / 100)).toFixed(2);
+  const total = +(taxableAmount + taxAmount).toFixed(2);
 
   const order = await Order.create({
     businessId,
     receiptNumber: generateReceiptNumber(),
     items,
-    subtotal,
+    subtotal: grossSubtotal,
+    itemDiscountsTotal,
+    billDiscountType,
+    billDiscountAmount,
+    taxableAmount,
     taxPercent,
     taxAmount,
     total,
@@ -48,7 +81,6 @@ export async function POST(req: NextRequest) {
     paymentMode,
   });
 
-  // Best-effort stock deduction; does not block receipt creation if it fails
   try {
     for (const it of items) {
       if (it.productId) {

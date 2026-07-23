@@ -6,6 +6,8 @@ export interface IOrderItem {
   barcode: string;
   price: number;
   qty: number;
+  discountType?: "percent" | "flat";
+  discountValue?: number;
 }
 
 export interface IOrder {
@@ -14,6 +16,10 @@ export interface IOrder {
   receiptNumber: string;
   items: IOrderItem[];
   subtotal: number;
+  itemDiscountsTotal: number;
+  billDiscountType: "percent" | "flat";
+  billDiscountAmount: number;
+  taxableAmount: number;
   taxPercent: number;
   taxAmount: number;
   total: number;
@@ -30,6 +36,8 @@ const OrderItemSchema = new Schema<IOrderItem>(
     barcode: { type: String, required: true },
     price: { type: Number, required: true },
     qty: { type: Number, required: true, min: 1 },
+    discountType: { type: String, enum: ["percent", "flat"], default: "percent" },
+    discountValue: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
@@ -40,6 +48,10 @@ const OrderSchema = new Schema<IOrder>(
     receiptNumber: { type: String, required: true },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
+    itemDiscountsTotal: { type: Number, default: 0 },
+    billDiscountType: { type: String, enum: ["percent", "flat"], default: "percent" },
+    billDiscountAmount: { type: Number, default: 0 },
+    taxableAmount: { type: Number, required: true },
     taxPercent: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     total: { type: Number, required: true },

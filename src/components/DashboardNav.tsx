@@ -10,6 +10,7 @@ const links = [
   { href: "/dashboard/billing", label: "Bill now" },
   { href: "/dashboard/products", label: "Products" },
   { href: "/dashboard/orders", label: "Receipts" },
+  { href: "/dashboard/settings", label: "Settings" },
   { href: "/dashboard/subscription", label: "Plan" },
 ];
 

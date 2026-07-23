@@ -10,6 +10,7 @@ export interface IBusiness {
   slug: string;
   logoUrl?: string;
   address?: string;
+  defaultTaxPercent: number;
   plan: {
     tier: "free" | "pro";
     status: "active" | "expired";
@@ -30,6 +31,7 @@ const BusinessSchema = new Schema<IBusiness>(
     slug: { type: String, required: true, unique: true },
     logoUrl: { type: String },
     address: { type: String },
+    defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
     plan: {
       tier: { type: String, enum: ["free", "pro"], default: "free" },
       status: { type: String, enum: ["active", "expired"], default: "active" },

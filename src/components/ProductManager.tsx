@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import BarcodeCanvas from "@/components/BarcodeCanvas";
+import PrintLabelsModal from "@/components/PrintLabelsModal";
 import { formatINR } from "@/lib/utils";
 
 interface Product {
@@ -20,6 +21,8 @@ export default function ProductManager() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [printing, setPrinting] = useState(false);
 
   const load = useCallback(async (q?: string) => {
     setLoading(true);
@@ -45,10 +48,30 @@ export default function ProductManager() {
     if (res.ok) {
       toast.success("Product removed");
       setProducts((p) => p.filter((x) => x._id !== id));
+      setSelected((s) => {
+        const next = new Set(s);
+        next.delete(id);
+        return next;
+      });
     } else {
       toast.error("Could not remove product");
     }
   }
+
+  function toggleSelected(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((s) => (s.size === products.length ? new Set() : new Set(products.map((p) => p._id))));
+  }
+
+  const selectedProducts = products.filter((p) => selected.has(p._id));
 
   return (
     <div>
@@ -59,20 +82,39 @@ export default function ProductManager() {
             Every product gets its own barcode automatically.
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
-        >
-          + Add product
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setPrinting(true)}
+            disabled={products.length === 0}
+            className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2 disabled:opacity-50"
+          >
+            {selected.size > 0 ? `Print selected (${selected.size})` : "Print all labels"}
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
+          >
+            + Add product
+          </button>
+        </div>
       </div>
 
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search by name or barcode…"
-        className="mt-5 w-full max-w-sm rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink"
-      />
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or barcode…"
+          className="w-full max-w-sm rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink"
+        />
+        {products.length > 0 && (
+          <button
+            onClick={toggleSelectAll}
+            className="text-xs font-medium text-ink-2 underline hover:text-ink"
+          >
+            {selected.size === products.length ? "Clear selection" : "Select all"}
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <p className="mt-8 text-sm text-slate">Loading products…</p>
@@ -85,8 +127,19 @@ export default function ProductManager() {
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((p) => (
-            <div key={p._id} className="rounded-2xl border border-line bg-white p-4">
+            <div
+              key={p._id}
+              className={`rounded-2xl border bg-white p-4 ${
+                selected.has(p._id) ? "border-signal ring-1 ring-signal" : "border-line"
+              }`}
+            >
               <div className="flex gap-3">
+                <input
+                  type="checkbox"
+                  checked={selected.has(p._id)}
+                  onChange={() => toggleSelected(p._id)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-signal"
+                />
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-paper-2">
                   {p.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -124,6 +177,13 @@ export default function ProductManager() {
             setProducts((p) => [product, ...p]);
             setShowForm(false);
           }}
+        />
+      )}
+
+      {printing && (
+        <PrintLabelsModal
+          products={selected.size > 0 ? selectedProducts : products}
+          onClose={() => setPrinting(false)}
         />
       )}
     </div>
