@@ -1,15 +1,11 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth.config";
+
+export const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isDashboard = req.nextUrl.pathname.startsWith("/dashboard");
-
-  if (isDashboard && !isLoggedIn) {
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
-  }
+  // the `authorized` callback in auth.config.ts already handles the redirect logic,
+  // so this can often be left empty, or you can add extra logic here
 });
 
 export const config = {
