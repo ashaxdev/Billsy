@@ -94,7 +94,7 @@ export default function BillingCounter() {
   }
 
   async function handleScan(barcode: string) {
-    const res = await fetch(`/api/products/${barcode}`);
+    const res = await fetch(`/api/products/${encodeURIComponent(barcode)}`);
     if (!res.ok) {
       setScanning(false);
       setUnknownBarcode(barcode);

@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name and price are required." }, { status: 400 });
   }
 
-  let finalBarcode = barcode || generateBarcodeValue();
+  let finalBarcode = (barcode || generateBarcodeValue()).trim();
   // ensure uniqueness in the unlikely event of collision
   let attempts = 0;
   while (await Product.findOne({ barcode: finalBarcode }) && attempts < 5) {

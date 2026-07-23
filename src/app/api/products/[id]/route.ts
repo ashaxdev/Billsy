@@ -11,12 +11,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   await dbConnect();
   const { id } = await params;
   const businessId = (session.user as { id: string }).id;
+  const trimmedId = id.trim();
 
-  // Allow lookup either by Mongo _id or by barcode value (for the POS scanner)
-  const product = await Product.findOne({
-    businessId,
-    $or: [{ _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : undefined }, { barcode: id }],
-  }).lean();
+  // Build $or conditions without ever including an `undefined`-valued key —
+  // Mongo silently drops those, turning `{ _id: undefined }` into `{}` (matches everything).
+  const orConditions: Record<string, unknown>[] = [{ barcode: trimmedId }];
+  if (/^[0-9a-fA-F]{24}$/.test(trimmedId)) {
+    orConditions.push({ _id: trimmedId });
+  }
+
+  const product = await Product.findOne({ businessId, $or: orConditions }).lean();
 
   if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
   return NextResponse.json({ product });

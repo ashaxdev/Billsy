@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import BarcodeCanvas from "@/components/BarcodeCanvas";
+import BarcodeScanner from "@/components/BarcodeScanner";
 import PrintLabelsModal from "@/components/PrintLabelsModal";
 import { formatINR } from "@/lib/utils";
 
@@ -79,7 +80,7 @@ export default function ProductManager() {
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">Products</h1>
           <p className="mt-1 text-sm text-ink-2">
-            Every product gets its own barcode automatically.
+            Scan an existing barcode when adding a product, or leave blank to auto-generate one.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -201,6 +202,8 @@ function ProductFormModal({
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
   const [category, setCategory] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [scanningBarcode, setScanningBarcode] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -250,12 +253,13 @@ function ProductFormModal({
           category: category || undefined,
           imageUrl,
           imagePublicId,
+          barcode: barcode.trim() || undefined, // blank → server auto-generates
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      toast.success("Product added with a new barcode");
+      toast.success(barcode.trim() ? "Product added with scanned barcode" : "Product added with a new barcode");
       onCreated(data.product);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add product");
@@ -274,6 +278,30 @@ function ProductFormModal({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate">
+              Barcode (optional)
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                placeholder="Leave blank to auto-generate"
+                className="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+              />
+              <button
+                type="button"
+                onClick={() => setScanningBarcode(true)}
+                className="shrink-0 rounded-lg border border-line px-3.5 py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2"
+              >
+                Scan
+              </button>
+            </div>
+            {barcode && (
+              <p className="mt-1 text-xs text-signal">This exact barcode will be saved for the product.</p>
+            )}
+          </div>
+
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate">
               Photo
@@ -351,10 +379,21 @@ function ProductFormModal({
             disabled={saving}
             className="w-full rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save product & generate barcode"}
+            {saving ? "Saving…" : "Save product"}
           </button>
         </form>
       </div>
+
+      {scanningBarcode && (
+        <BarcodeScanner
+          onScan={(value) => {
+            setBarcode(value);
+            setScanningBarcode(false);
+            toast.success(`Scanned: ${value}`);
+          }}
+          onClose={() => setScanningBarcode(false)}
+        />
+      )}
     </div>
   );
 }
