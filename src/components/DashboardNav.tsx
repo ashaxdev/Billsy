@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const links = [
   { href: "/dashboard", label: "Overview" },
@@ -14,6 +14,13 @@ const links = [
   { href: "/dashboard/subscription", label: "Plan" },
 ];
 
+type SubscriptionStatus = {
+  plan: "free" | "pro";
+  daysLeft: number;
+  trialActive: boolean;
+  trialExpired: boolean;
+};
+
 export default function DashboardNav({
   businessName,
 }: {
@@ -21,6 +28,37 @@ export default function DashboardNav({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/subscription/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setStatus(data);
+      })
+      .catch(() => {
+        // fail silently — nav should never break if this call fails
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const trialBadge = status && status.plan === "free" && (
+    <Link
+      href="/dashboard/subscription"
+      className={`hidden rounded-full px-3 py-1 text-xs font-medium sm:inline ${
+        status.trialExpired
+          ? "bg-danger/10 text-danger"
+          : "bg-amber/15 text-ink-2"
+      }`}
+    >
+      {status.trialExpired
+        ? "Trial ended — upgrade to continue"
+        : `${status.daysLeft} day${status.daysLeft === 1 ? "" : "s"} left in trial`}
+    </Link>
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
@@ -30,6 +68,7 @@ export default function DashboardNav({
             Billsy
           </Link>
           <span className="hidden text-sm text-slate sm:inline">/ {businessName}</span>
+          {trialBadge}
         </div>
 
         <button
@@ -61,6 +100,18 @@ export default function DashboardNav({
           </button>
         </nav>
       </div>
+
+      {status?.plan === "free" && (
+        <div
+          className={`px-4 py-1.5 text-center text-xs font-medium sm:hidden ${
+            status.trialExpired ? "bg-danger/10 text-danger" : "bg-amber/15 text-ink-2"
+          }`}
+        >
+          {status.trialExpired
+            ? "Trial ended — upgrade to continue"
+            : `${status.daysLeft} day${status.daysLeft === 1 ? "" : "s"} left in trial`}
+        </div>
+      )}
 
       {open && (
         <nav className="flex flex-col gap-1 border-t border-line px-4 py-3 sm:hidden">

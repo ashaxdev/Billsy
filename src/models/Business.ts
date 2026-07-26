@@ -23,42 +23,101 @@ export interface IBusiness {
     razorpayPaymentId?: string;
   };
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const BusinessSchema = new Schema<IBusiness>(
   {
-    businessName: { type: String, required: true, trim: true },
-    ownerName: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    phone: { type: String, required: true, trim: true },
-    passwordHash: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
-    logoUrl: { type: String },
-    address: { type: String },
-    defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
-    // When the free trial ends for this business. Defaulted on creation below;
-    // /api/subscription/status also falls back to createdAt + 7 days if this
-    // is ever missing (e.g. for businesses created before this field existed).
-    trialEndsAt: { type: Date },
+    businessName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    ownerName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    passwordHash: {
+      type: String,
+      required: true,
+    },
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    logoUrl: {
+      type: String,
+      default: "",
+    },
+    address: {
+      type: String,
+      default: "",
+    },
+    defaultTaxPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    trialEndsAt: {
+      type: Date,
+    },
     plan: {
-      tier: { type: String, enum: ["free", "pro"], default: "free" },
-      cycle: { type: String, enum: ["monthly", "yearly"] },
-      status: { type: String, enum: ["active", "expired"], default: "active" },
-      expiresAt: { type: Date },
-      razorpayOrderId: { type: String },
-      razorpayPaymentId: { type: String },
+      tier: {
+        type: String,
+        enum: ["free", "pro"],
+        default: "free",
+      },
+      cycle: {
+        type: String,
+        enum: ["monthly", "yearly"],
+      },
+      status: {
+        type: String,
+        enum: ["active", "expired"],
+        default: "active",
+      },
+      expiresAt: {
+        type: Date,
+      },
+      razorpayOrderId: {
+        type: String,
+      },
+      razorpayPaymentId: {
+        type: String,
+      },
     },
   },
-  { timestamps: { createdAt: true, updatedAt: true } }
+  {
+    timestamps: true,
+  }
 );
 
-// Stamp the trial end date once, at creation, so it's explicit and persisted
-// rather than only ever being computed on the fly.
-BusinessSchema.pre("save", function (next) {
+// Automatically set the trial period for new businesses
+BusinessSchema.pre("save", function () {
   if (this.isNew && !this.trialEndsAt) {
-    this.trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    this.trialEndsAt = new Date(
+      Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000
+    );
   }
-  next();
 });
 
-export default models.Business || model<IBusiness>("Business", BusinessSchema);
+const Business =
+  models.Business || model<IBusiness>("Business", BusinessSchema);
+
+export default Business;

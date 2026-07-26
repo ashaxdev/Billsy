@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Script from "next/script";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
@@ -14,11 +14,29 @@ declare global {
 
 type BillingCycle = "monthly" | "yearly";
 
+type SubscriptionStatus = {
+  plan: "free" | "pro";
+  cycle: BillingCycle | null;
+  trialEndsAt: string;
+  daysLeft: number;
+  trialActive: boolean;
+  trialExpired: boolean;
+};
+
 export default function SubscriptionPage() {
-  const { data: session, update } = useSession();
+  const { update } = useSession();
   const [loading, setLoading] = useState(false);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
-  const plan = (session?.user as { plan?: string })?.plan || "free";
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/subscription/status")
+      .then((res) => res.json())
+      .then((data) => setStatus(data))
+      .catch(() => toast.error("Couldn't load your plan status"))
+      .finally(() => setStatusLoading(false));
+  }, []);
 
   async function handleUpgrade() {
     setLoading(true);
@@ -56,6 +74,7 @@ export default function SubscriptionPage() {
           if (verifyRes.ok) {
             toast.success("You're on Billsy Pro now!");
             await update();
+            setStatus((s) => (s ? { ...s, plan: "pro" } : s));
           } else {
             toast.error(verifyData.error || "Verification failed");
           }
@@ -69,6 +88,8 @@ export default function SubscriptionPage() {
     }
   }
 
+  const plan = status?.plan ?? "free";
+
   return (
     <div className="mx-auto max-w-2xl">
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
@@ -76,6 +97,30 @@ export default function SubscriptionPage() {
       <p className="mt-1 text-sm text-ink-2">
         You&rsquo;re currently on the <strong className="capitalize">{plan}</strong> plan.
       </p>
+
+      {!statusLoading && status && status.plan === "free" && (
+        <div
+          className={`mt-4 rounded-xl border p-4 text-sm ${
+            status.trialExpired
+              ? "border-danger/30 bg-danger/5 text-danger"
+              : "border-amber/30 bg-amber/10 text-ink-2"
+          }`}
+        >
+          {status.trialExpired ? (
+            <>Your free trial has ended. Upgrade to Pro to keep billing without interruption.</>
+          ) : (
+            <>
+              You have <strong>{status.daysLeft}</strong> day
+              {status.daysLeft === 1 ? "" : "s"} left in your free trial (ends{" "}
+              {new Date(status.trialEndsAt).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+              })}
+              ).
+            </>
+          )}
+        </div>
+      )}
 
       {plan !== "pro" && (
         <div className="mt-6 inline-flex rounded-full border border-line bg-paper-2 p-1">

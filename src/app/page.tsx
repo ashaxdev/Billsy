@@ -21,7 +21,7 @@ export default function Home() {
               href="/register"
               className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-ink-2"
             >
-              Start billing 
+              Start your free 7-day trial
             </Link>
           </nav>
         </div>
@@ -31,7 +31,7 @@ export default function Home() {
       <section className="mx-auto grid max-w-6xl gap-12 px-5 pt-14 pb-16 sm:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div>
           <p className="font-data mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper-2 px-3 py-1 text-xs tracking-wide text-slate uppercase">
-            Made for kirana stores, salons &amp; small shops
+            Made for Small Business
           </p>
           <h1 className="font-display text-4xl font-bold leading-[1.08] tracking-tight text-ink sm:text-5xl lg:text-[3.4rem]">
             Your phone is now
@@ -59,7 +59,7 @@ export default function Home() {
             </Link>
           </div>
           <p className="mt-6 text-xs text-slate">
-            Free for up to 30 products. Upgrade to Pro anytime, no lock-in.
+            Free for 7 days, no card required. Then just ₹499/mo to keep billing.
           </p>
         </div>
 
@@ -189,7 +189,11 @@ export default function Home() {
         <h2 className="font-display text-2xl font-bold text-ink sm:text-3xl">
           Simple pricing, pay only when you outgrow free.
         </h2>
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 sm:max-w-2xl">
+        <p className="mt-3 max-w-xl text-sm text-ink-2">
+          Every new business starts with a 7-day free trial &mdash; full access, no card
+          required. Choose a plan below when you&rsquo;re ready to continue.
+        </p>
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 sm:max-w-2xl">
           <div className="receipt-edge-top receipt-edge-bottom border border-line bg-white p-7">
             <p className="font-display text-sm font-semibold uppercase tracking-wide text-slate">
               Monthly
@@ -223,8 +227,8 @@ export default function Home() {
           <p>Billing, barcodes, printing and receipts for small businesses.</p>
           <p>
             Developed by{" "}
-            <a
-              href="https://www.nexirasolution.in"
+            
+             <a href="https://www.nexirasolution.in"
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-ink-2 underline decoration-line underline-offset-4 hover:text-ink"
