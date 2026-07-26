@@ -13,3 +13,4 @@ export function getRazorpay() {
 }
 
 export const PRO_PLAN_PRICE_INR = 499; // per month
+export const PRO_PLAN_YEARLY_PRICE_INR = 5000; // per year (~17% cheaper than 12x monthly)

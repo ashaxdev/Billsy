@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Script from "next/script";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
@@ -12,19 +12,22 @@ declare global {
   }
 }
 
+type BillingCycle = "monthly" | "yearly";
+
 export default function SubscriptionPage() {
   const { data: session, update } = useSession();
   const [loading, setLoading] = useState(false);
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const plan = (session?.user as { plan?: string })?.plan || "free";
-
-  useEffect(() => {
-    // refresh session on mount so plan status reflects latest DB state after redirects
-  }, []);
 
   async function handleUpgrade() {
     setLoading(true);
     try {
-      const orderRes = await fetch("/api/subscription/create-order", { method: "POST" });
+      const orderRes = await fetch("/api/subscription/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycle }),
+      });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
 
@@ -33,7 +36,10 @@ export default function SubscriptionPage() {
         amount: orderData.order.amount,
         currency: orderData.order.currency,
         name: "Billsy Pro",
-        description: "Monthly subscription — unlimited products",
+        description:
+          cycle === "yearly"
+            ? "Yearly subscription — unlimited products"
+            : "Monthly subscription — unlimited products",
         order_id: orderData.order.id,
         theme: { color: "#16202b" },
         handler: async function (response: {
@@ -71,6 +77,30 @@ export default function SubscriptionPage() {
         You&rsquo;re currently on the <strong className="capitalize">{plan}</strong> plan.
       </p>
 
+      {plan !== "pro" && (
+        <div className="mt-6 inline-flex rounded-full border border-line bg-paper-2 p-1">
+          <button
+            onClick={() => setCycle("monthly")}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              cycle === "monthly" ? "bg-white text-ink shadow-sm" : "text-ink-2"
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setCycle("yearly")}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              cycle === "yearly" ? "bg-white text-ink shadow-sm" : "text-ink-2"
+            }`}
+          >
+            Yearly
+            <span className="ml-1.5 rounded-full bg-signal px-1.5 py-0.5 text-[10px] font-semibold text-paper">
+              Save 17%
+            </span>
+          </button>
+        </div>
+      )}
+
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <div className="receipt-edge-top receipt-edge-bottom border border-line bg-white p-6">
           <p className="font-display text-sm font-semibold uppercase tracking-wide text-slate">
@@ -80,7 +110,7 @@ export default function SubscriptionPage() {
           <ul className="mt-4 space-y-2 text-sm text-ink-2">
             <li>Up to 30 products</li>
             <li>Unlimited billing &amp; receipts</li>
-            <li>WhatsApp receipt sharing</li>
+            <li>Print &amp; WhatsApp receipt sharing</li>
           </ul>
           {plan === "free" && (
             <p className="font-data mt-5 text-xs uppercase tracking-wide text-signal">
@@ -93,9 +123,12 @@ export default function SubscriptionPage() {
           <p className="font-display text-sm font-semibold uppercase tracking-wide text-amber">
             Pro
           </p>
-          <p className="font-display mt-2 text-3xl font-bold">₹499/mo</p>
+          <p className="font-display mt-2 text-3xl font-bold">
+            {cycle === "yearly" ? "₹5,000/yr" : "₹499/mo"}
+          </p>
           <ul className="mt-4 space-y-2 text-sm text-paper/85">
             <li>Unlimited products</li>
+            <li>Print &amp; WhatsApp receipts</li>
             <li>Priority support</li>
             <li>Everything in Free</li>
           </ul>
@@ -109,7 +142,9 @@ export default function SubscriptionPage() {
               disabled={loading}
               className="mt-5 w-full rounded-full bg-amber py-2.5 text-sm font-semibold text-ink hover:opacity-90 disabled:opacity-60"
             >
-              {loading ? "Starting checkout…" : "Upgrade to Pro"}
+              {loading
+                ? "Starting checkout…"
+                : `Upgrade to Pro — ${cycle === "yearly" ? "₹5,000/yr" : "₹499/mo"}`}
             </button>
           )}
         </div>

@@ -21,7 +21,7 @@ export default function Home() {
               href="/register"
               className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-ink-2"
             >
-              Start billing free
+              Start billing 
             </Link>
           </nav>
         </div>

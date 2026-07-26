@@ -16,10 +16,8 @@ const links = [
 
 export default function DashboardNav({
   businessName,
-  plan,
 }: {
   businessName: string;
-  plan: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -32,13 +30,6 @@ export default function DashboardNav({
             Billsy
           </Link>
           <span className="hidden text-sm text-slate sm:inline">/ {businessName}</span>
-          <span
-            className={`font-data rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-              plan === "pro" ? "bg-amber-light text-amber" : "bg-paper-2 text-slate"
-            }`}
-          >
-            {plan}
-          </span>
         </div>
 
         <button
