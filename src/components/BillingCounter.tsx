@@ -203,6 +203,18 @@ export default function BillingCounter() {
     setCompletedOrder(null);
   }
 
+  function printReceipt(orderId: string) {
+    const receiptWindow = window.open(`/receipt/${orderId}?print=1`, "_blank");
+    if (!receiptWindow) {
+      toast.error("Please allow pop-ups to print the receipt.");
+      return;
+    }
+    receiptWindow.addEventListener("load", () => {
+      receiptWindow.focus();
+      receiptWindow.print();
+    });
+  }
+
   if (completedOrder) {
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const receiptUrl = `${siteUrl}/receipt/${completedOrder._id}`;
@@ -214,14 +226,19 @@ export default function BillingCounter() {
           <p className="font-data mt-1 text-3xl font-bold text-signal">{formatINR(completedOrder.total)}</p>
 
           <div className="mt-6 flex flex-col gap-3">
+            <button
+              onClick={() => printReceipt(completedOrder._id)}
+              className="rounded-full bg-ink py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
+            >
+              🖨️ Print receipt
+            </button>
             {customerPhone && (
-              
                <a href={whatsappShareUrl(customerPhone, `Here's your receipt from us: ${receiptUrl}`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90"
               >
-                Share on WhatsApp
+                💬 Share on WhatsApp
               </a>
             )}
             <Link
@@ -233,7 +250,7 @@ export default function BillingCounter() {
             </Link>
             <button
               onClick={startNewBill}
-              className="rounded-full bg-ink py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
+              className="rounded-full bg-amber py-2.5 text-sm font-semibold text-ink hover:opacity-90"
             >
               Start next bill
             </button>
@@ -448,7 +465,73 @@ export default function BillingCounter() {
         </div>
       </div>
 
-      {scanning && <BarcodeScanner onScan={(value) => handleScan(value)} onClose={() => setScanning(false)} />}
+      {scanning && (
+        <>
+          <BarcodeScanner onScan={(value) => handleScan(value)} onClose={() => setScanning(false)} />
+
+          {/* Live receipt — bottom half, updates instantly as items are scanned */}
+          <div className="fixed inset-x-0 bottom-0 z-50 flex h-[42vh] flex-col rounded-t-2xl border-t border-line bg-white shadow-[0_-15px_35px_-20px_rgba(22,32,43,0.4)] sm:h-[38vh]">
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              <span className="font-display text-sm font-semibold text-ink">
+                Current bill
+                {cart.length > 0 && (
+                  <span className="ml-1.5 font-normal text-slate">
+                    &middot; {cart.length} item{cart.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={() => setScanning(false)}
+                className="rounded-full bg-signal px-4 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
+              >
+                Done scanning
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {cart.length === 0 ? (
+                <p className="p-6 text-center text-sm text-slate">
+                  Scan an item — it&rsquo;ll show up here instantly.
+                </p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {cart.map((item) => (
+                    <li key={item.barcode} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+                        <p className="font-data text-xs text-slate">{formatINR(item.price)} each</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateQty(item.barcode, -1)}
+                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
+                        >
+                          −
+                        </button>
+                        <span className="font-data w-4 text-center text-sm">{item.qty}</span>
+                        <button
+                          onClick={() => updateQty(item.barcode, 1)}
+                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="font-data w-16 shrink-0 text-right text-sm font-semibold text-ink">
+                        {formatINR(item.price * item.qty - lineDiscountAmount(item))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="font-data flex items-center justify-between border-t border-dashed border-line px-4 py-3">
+              <span className="text-sm text-ink-2">Running total</span>
+              <span className="text-base font-bold text-ink">{formatINR(total)}</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {unknownBarcode && (
         <QuickAddProductModal

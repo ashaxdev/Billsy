@@ -28,7 +28,7 @@ export default function BarcodeScanner({
       try {
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 260, height: 140 } },
+          { fps: 10, qrbox: { width: 240, height: 110 } },
           (decodedText) => {
             const now = Date.now();
             // debounce duplicate reads of the same barcode within 1.5s
@@ -61,7 +61,7 @@ export default function BarcodeScanner({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-ink/95 backdrop-blur-sm">
+    <div className="fixed inset-x-0 top-0 z-50 flex h-[58vh] flex-col overflow-hidden rounded-b-2xl bg-ink/95 backdrop-blur-sm shadow-[0_20px_35px_-20px_rgba(22,32,43,0.5)] sm:h-[62vh]">
       <div className="flex items-center justify-between px-4 py-3 text-paper">
         <span className="font-display text-sm tracking-wide uppercase">Scan barcode</span>
         <button
@@ -76,7 +76,7 @@ export default function BarcodeScanner({
           <div id={REGION_ID} className="w-full" />
         </div>
       </div>
-      <div className="px-6 pb-8 text-center text-xs text-paper/70">
+      <div className="px-6 pb-4 text-center text-xs text-paper/70">
         {error ? error : "Hold the barcode steady inside the frame"}
       </div>
     </div>

@@ -100,6 +100,16 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
 
         <p className="mt-4 text-center text-xs text-slate">
           Generated with Billsy — billing for small businesses.
+          <br />
+          Developed by{" "}
+          <a
+            href="https://www.nexirasolution.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-ink-2 underline decoration-line underline-offset-4 hover:text-ink"
+          >
+            Nexira Solution
+          </a>
         </p>
       </div>
     </div>
