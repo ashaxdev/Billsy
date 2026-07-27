@@ -5,6 +5,8 @@ import Product from "@/models/Product";
 import Order from "@/models/Order";
 import { formatINR } from "@/lib/utils";
 
+const SUPPORT_WHATSAPP_NUMBER = "919486350579"; // 91 + 9486350579
+
 export default async function DashboardHome() {
   const session = await auth();
   const businessId = (session?.user as { id: string })?.id;
@@ -83,6 +85,8 @@ export default async function DashboardHome() {
           </div>
         )}
       </div>
+
+      <FloatingSupportButton />
     </div>
   );
 }
@@ -93,5 +97,30 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium uppercase tracking-wide text-slate">{label}</p>
       <p className="font-display mt-1.5 text-2xl font-bold text-ink">{value}</p>
     </div>
+  );
+}
+
+function FloatingSupportButton() {
+  return (
+    <a
+      href={`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+        "Hi, I need some help with my billing account."
+      )}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat with support on WhatsApp"
+      title="Chat with support on WhatsApp"
+      className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_8px_24px_-6px_rgba(37,211,102,0.6)] transition hover:scale-105 hover:opacity-95"
+    >
+      <svg
+        viewBox="0 0 32 32"
+        width="28"
+        height="28"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M16.004 2.667c-7.363 0-13.333 5.97-13.333 13.333 0 2.353.615 4.66 1.784 6.687L2.667 29.333l6.822-1.789a13.28 13.28 0 0 0 6.515 1.72h.006c7.363 0 13.333-5.97 13.333-13.333s-5.97-13.264-13.339-13.264Zm0 24.4h-.005a11.1 11.1 0 0 1-5.653-1.548l-.405-.24-4.049 1.062 1.081-3.946-.264-.406a11.06 11.06 0 0 1-1.696-5.925c0-6.127 4.987-11.113 11.117-11.113 2.97 0 5.76 1.157 7.859 3.257a11.04 11.04 0 0 1 3.253 7.863c-.003 6.126-4.99 11.05-11.238 11.05Zm6.098-8.283c-.334-.167-1.978-.976-2.284-1.087-.306-.111-.529-.167-.751.167-.223.334-.862 1.087-1.057 1.31-.195.223-.39.25-.724.084-.334-.167-1.411-.52-2.688-1.658-.994-.886-1.665-1.98-1.86-2.314-.195-.334-.021-.514.146-.68.15-.15.334-.39.501-.585.167-.195.223-.334.334-.557.111-.223.056-.418-.028-.585-.084-.167-.751-1.81-1.029-2.478-.271-.65-.546-.562-.751-.573l-.64-.012c-.223 0-.585.084-.891.418-.306.334-1.169 1.142-1.169 2.786 0 1.644 1.196 3.232 1.363 3.455.167.223 2.354 3.594 5.703 5.04.797.344 1.418.55 1.902.704.799.254 1.526.218 2.101.132.641-.096 1.978-.809 2.257-1.591.279-.782.279-1.452.195-1.591-.084-.14-.306-.223-.64-.39Z" />
+      </svg>
+    </a>
   );
 }
