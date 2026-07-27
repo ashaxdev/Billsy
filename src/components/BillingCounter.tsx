@@ -3,10 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { jsPDF } from "jspdf";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QuickAddProductModal from "@/components/QuickAddProductModal";
-import { formatINR } from "@/lib/utils";
+import { formatINR, whatsappShareUrl } from "@/lib/utils";
 
 type DiscountType = "percent" | "flat";
 
@@ -52,8 +51,6 @@ export default function BillingCounter() {
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "other">("cash");
   const [checkingOut, setCheckingOut] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CreatedOrder | null>(null);
-  const [businessName, setBusinessName] = useState("Receipt");
-  const [generatingPdf, setGeneratingPdf] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch the business's saved default tax % and prefill the bill with it.
@@ -67,9 +64,6 @@ export default function BillingCounter() {
             const val = String(data.defaultTaxPercent);
             setDefaultTaxPercent(val);
             setTaxPercent(val);
-          }
-          if (typeof data.businessName === "string" && data.businessName.trim()) {
-            setBusinessName(data.businessName);
           }
         }
       } catch {
@@ -209,144 +203,9 @@ export default function BillingCounter() {
     setCompletedOrder(null);
   }
 
-  function printReceipt(orderId: string) {
-    const receiptWindow = window.open(`/receipt/${orderId}?print=1`, "_blank");
-    if (!receiptWindow) {
-      toast.error("Please allow pop-ups to print the receipt.");
-      return;
-    }
-    receiptWindow.addEventListener("load", () => {
-      receiptWindow.focus();
-      receiptWindow.print();
-    });
-  }
-
-  // --- PDF generation ---
-  // Builds a narrow, thermal-receipt-style PDF from the data already in
-  // state (cart / customer / totals are still populated at this point,
-  // since startNewBill() hasn't run yet).
-  function buildReceiptPdf(order: CreatedOrder) {
-    const pageWidth = 226; // ~80mm receipt width in points
-    const doc = new jsPDF({ unit: "pt", format: [pageWidth, 600] });
-    const marginX = 14;
-    let y = 24;
-    const lineGap = 14;
-
-    const center = (text: string, size = 11, bold = false) => {
-      doc.setFont("courier", bold ? "bold" : "normal");
-      doc.setFontSize(size);
-      doc.text(text, pageWidth / 2, y, { align: "center" });
-      y += lineGap;
-    };
-    const row = (left: string, right: string, bold = false) => {
-      doc.setFont("courier", bold ? "bold" : "normal");
-      doc.setFontSize(9.5);
-      doc.text(left, marginX, y);
-      doc.text(right, pageWidth - marginX, y, { align: "right" });
-      y += 12;
-    };
-    const rule = () => {
-      doc.setLineDashPattern([2, 1], 0);
-      doc.line(marginX, y, pageWidth - marginX, y);
-      y += 10;
-    };
-
-    center(businessName, 13, true);
-    center(order.receiptNumber, 9);
-    y += 2;
-    rule();
-
-    if (customerName) row("Customer", customerName);
-    if (customerPhone) row("Phone", customerPhone);
-    if (customerName || customerPhone) rule();
-
-    cart.forEach((item) => {
-      const disc = lineDiscountAmount(item);
-      const lineTotal = item.price * item.qty - disc;
-      row(`${item.name} x${item.qty}`, formatINR(lineTotal));
-      if (disc > 0) {
-        doc.setFont("courier", "normal");
-        doc.setFontSize(8.5);
-        doc.text(`  (disc -${formatINR(disc)})`, marginX, y);
-        y += 11;
-      }
-    });
-    rule();
-
-    row("Subtotal", formatINR(grossSubtotal));
-    if (itemDiscountsTotal > 0) row("Item discounts", `-${formatINR(itemDiscountsTotal)}`);
-    if (billDiscountAmount > 0) row("Bill discount", `-${formatINR(billDiscountAmount)}`);
-    row("Tax", formatINR(tax));
-    rule();
-    row("TOTAL", formatINR(order.total), true);
-    y += 6;
-    row("Payment", paymentMode.toUpperCase());
-    y += 10;
-
-    center("Thank you for your business!", 9);
-
-    return doc;
-  }
-
-  async function downloadReceiptPdf() {
-    if (!completedOrder) return;
-    setGeneratingPdf(true);
-    try {
-      const doc = buildReceiptPdf(completedOrder);
-      doc.save(`${completedOrder.receiptNumber}.pdf`);
-    } finally {
-      setGeneratingPdf(false);
-    }
-  }
-
-  // Normalizes whatever the merchant typed (spaces, dashes, brackets, an
-  // optional leading +) into digits-only, and assumes an Indian number
-  // (91) when no country code was entered. Adjust the default country
-  // code here if you operate outside India.
-  function normalizeWhatsappNumber(raw: string) {
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) return null;
-    if (digits.length === 10) return `91${digits}`;
-    return digits;
-  }
-
-  async function shareReceiptPdfToCustomer() {
-    if (!completedOrder) return;
-    const number = normalizeWhatsappNumber(customerPhone);
-    if (!number) {
-      toast.error("Enter the customer's WhatsApp number first.");
-      return;
-    }
-
-    setGeneratingPdf(true);
-    try {
-      // Open the exact chat first, synchronously, so the popup blocker
-      // doesn't eat it.
-      const text = `Hi${customerName ? " " + customerName : ""}, here's your receipt ${completedOrder.receiptNumber} for ${formatINR(
-        completedOrder.total
-      )}. I'm attaching the PDF now.`;
-      const chatWindow = window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
-      if (!chatWindow) {
-        toast.error("Please allow pop-ups to open WhatsApp.");
-      }
-
-      // Deliberately NOT using navigator.share() here: on-device support for
-      // sharing files (as opposed to plain text/links) is inconsistent
-      // across mobile browsers, OS versions, and in-app webviews — it
-      // reports canShare as true and then still throws in some setups.
-      // Downloading is the one path that works everywhere, every time.
-      const doc = buildReceiptPdf(completedOrder);
-      doc.save(`${completedOrder.receiptNumber}.pdf`);
-      toast.success("WhatsApp opened — attach the downloaded PDF from your files.");
-    } catch (err) {
-      console.error("shareReceiptPdfToCustomer failed:", err);
-      toast.error(err instanceof Error ? `Couldn't prepare the PDF: ${err.message}` : "Couldn't prepare the PDF.");
-    } finally {
-      setGeneratingPdf(false);
-    }
-  }
-
   if (completedOrder) {
+    const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const receiptUrl = `${siteUrl}/receipt/${completedOrder._id}`;
     return (
       <div className="mx-auto max-w-md">
         <div className="receipt-edge-top receipt-edge-bottom border border-line bg-white p-7 text-center">
@@ -355,27 +214,16 @@ export default function BillingCounter() {
           <p className="font-data mt-1 text-3xl font-bold text-signal">{formatINR(completedOrder.total)}</p>
 
           <div className="mt-6 flex flex-col gap-3">
-            <button
-              onClick={() => printReceipt(completedOrder._id)}
-              className="rounded-full bg-ink py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
-            >
-              🖨️ Print receipt
-            </button>
-            <button
-              onClick={downloadReceiptPdf}
-              disabled={generatingPdf}
-              className="rounded-full border border-line py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2 disabled:opacity-60"
-            >
-              ⬇️ Download PDF
-            </button>
-            <button
-              onClick={shareReceiptPdfToCustomer}
-              disabled={generatingPdf || !customerPhone}
-              title={!customerPhone ? "Enter the customer's WhatsApp number first" : undefined}
-              className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
-            >
-              💬 Share PDF on WhatsApp
-            </button>
+            {customerPhone && (
+              
+               <a href={whatsappShareUrl(customerPhone, `Here's your receipt from us: ${receiptUrl}`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90"
+              >
+                Share on WhatsApp
+              </a>
+            )}
             <Link
              href={`/receipt/${completedOrder._id}`}
               target="_blank"
@@ -385,7 +233,7 @@ export default function BillingCounter() {
             </Link>
             <button
               onClick={startNewBill}
-              className="rounded-full bg-amber py-2.5 text-sm font-semibold text-ink hover:opacity-90"
+              className="rounded-full bg-ink py-2.5 text-sm font-semibold text-paper hover:bg-ink-2"
             >
               Start next bill
             </button>
@@ -600,73 +448,7 @@ export default function BillingCounter() {
         </div>
       </div>
 
-      {scanning && (
-        <>
-          <BarcodeScanner onScan={(value) => handleScan(value)} onClose={() => setScanning(false)} />
-
-          {/* Live receipt — bottom half, updates instantly as items are scanned */}
-          <div className="fixed inset-x-0 bottom-0 z-50 flex h-[42vh] flex-col rounded-t-2xl border-t border-line bg-white shadow-[0_-15px_35px_-20px_rgba(22,32,43,0.4)] sm:h-[38vh]">
-            <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <span className="font-display text-sm font-semibold text-ink">
-                Current bill
-                {cart.length > 0 && (
-                  <span className="ml-1.5 font-normal text-slate">
-                    &middot; {cart.length} item{cart.length > 1 ? "s" : ""}
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => setScanning(false)}
-                className="rounded-full bg-signal px-4 py-1.5 text-xs font-semibold text-paper hover:opacity-90"
-              >
-                Done scanning
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {cart.length === 0 ? (
-                <p className="p-6 text-center text-sm text-slate">
-                  Scan an item — it&rsquo;ll show up here instantly.
-                </p>
-              ) : (
-                <ul className="divide-y divide-line">
-                  {cart.map((item) => (
-                    <li key={item.barcode} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-ink">{item.name}</p>
-                        <p className="font-data text-xs text-slate">{formatINR(item.price)} each</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateQty(item.barcode, -1)}
-                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
-                        >
-                          −
-                        </button>
-                        <span className="font-data w-4 text-center text-sm">{item.qty}</span>
-                        <button
-                          onClick={() => updateQty(item.barcode, 1)}
-                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <span className="font-data w-16 shrink-0 text-right text-sm font-semibold text-ink">
-                        {formatINR(item.price * item.qty - lineDiscountAmount(item))}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="font-data flex items-center justify-between border-t border-dashed border-line px-4 py-3">
-              <span className="text-sm text-ink-2">Running total</span>
-              <span className="text-base font-bold text-ink">{formatINR(total)}</span>
-            </div>
-          </div>
-        </>
-      )}
+      {scanning && <BarcodeScanner onScan={(value) => handleScan(value)} onClose={() => setScanning(false)} />}
 
       {unknownBarcode && (
         <QuickAddProductModal
