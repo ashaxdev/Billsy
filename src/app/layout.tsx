@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500", "700"],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://billsy.nexirasolution.in";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

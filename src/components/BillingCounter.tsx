@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { jsPDF } from "jspdf";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QuickAddProductModal from "@/components/QuickAddProductModal";
 import { formatINR, whatsappShareUrl } from "@/lib/utils";
@@ -51,6 +52,8 @@ export default function BillingCounter() {
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "other">("cash");
   const [checkingOut, setCheckingOut] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CreatedOrder | null>(null);
+  const [businessName, setBusinessName] = useState("Receipt");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch the business's saved default tax % and prefill the bill with it.
@@ -64,6 +67,9 @@ export default function BillingCounter() {
             const val = String(data.defaultTaxPercent);
             setDefaultTaxPercent(val);
             setTaxPercent(val);
+          }
+          if (typeof data.businessName === "string" && data.businessName.trim()) {
+            setBusinessName(data.businessName);
           }
         }
       } catch {
@@ -215,6 +221,121 @@ export default function BillingCounter() {
     });
   }
 
+  // --- PDF generation ---
+  // Builds a narrow, thermal-receipt-style PDF from the data already in
+  // state (cart / customer / totals are still populated at this point,
+  // since startNewBill() hasn't run yet).
+  function buildReceiptPdf(order: CreatedOrder) {
+    const pageWidth = 226; // ~80mm receipt width in points
+    const doc = new jsPDF({ unit: "pt", format: [pageWidth, 600] });
+    const marginX = 14;
+    let y = 24;
+    const lineGap = 14;
+
+    const center = (text: string, size = 11, bold = false) => {
+      doc.setFont("courier", bold ? "bold" : "normal");
+      doc.setFontSize(size);
+      doc.text(text, pageWidth / 2, y, { align: "center" });
+      y += lineGap;
+    };
+    const row = (left: string, right: string, bold = false) => {
+      doc.setFont("courier", bold ? "bold" : "normal");
+      doc.setFontSize(9.5);
+      doc.text(left, marginX, y);
+      doc.text(right, pageWidth - marginX, y, { align: "right" });
+      y += 12;
+    };
+    const rule = () => {
+      doc.setLineDashPattern([2, 1], 0);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 10;
+    };
+
+    center(businessName, 13, true);
+    center(order.receiptNumber, 9);
+    y += 2;
+    rule();
+
+    if (customerName) row("Customer", customerName);
+    if (customerPhone) row("Phone", customerPhone);
+    if (customerName || customerPhone) rule();
+
+    cart.forEach((item) => {
+      const disc = lineDiscountAmount(item);
+      const lineTotal = item.price * item.qty - disc;
+      row(`${item.name} x${item.qty}`, formatINR(lineTotal));
+      if (disc > 0) {
+        doc.setFont("courier", "normal");
+        doc.setFontSize(8.5);
+        doc.text(`  (disc -${formatINR(disc)})`, marginX, y);
+        y += 11;
+      }
+    });
+    rule();
+
+    row("Subtotal", formatINR(grossSubtotal));
+    if (itemDiscountsTotal > 0) row("Item discounts", `-${formatINR(itemDiscountsTotal)}`);
+    if (billDiscountAmount > 0) row("Bill discount", `-${formatINR(billDiscountAmount)}`);
+    row("Tax", formatINR(tax));
+    rule();
+    row("TOTAL", formatINR(order.total), true);
+    y += 6;
+    row("Payment", paymentMode.toUpperCase());
+    y += 10;
+
+    center("Thank you for your business!", 9);
+
+    return doc;
+  }
+
+  async function downloadReceiptPdf() {
+    if (!completedOrder) return;
+    setGeneratingPdf(true);
+    try {
+      const doc = buildReceiptPdf(completedOrder);
+      doc.save(`${completedOrder.receiptNumber}.pdf`);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
+  async function shareReceiptPdf() {
+    if (!completedOrder) return;
+    setGeneratingPdf(true);
+    try {
+      const doc = buildReceiptPdf(completedOrder);
+      const blob = doc.output("blob");
+      const file = new File([blob], `${completedOrder.receiptNumber}.pdf`, {
+        type: "application/pdf",
+      });
+
+      // Prefer the native share sheet (lets the user pick WhatsApp, etc.)
+      // when the browser supports sharing files.
+      if (
+        typeof navigator !== "undefined" &&
+        "canShare" in navigator &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          files: [file],
+          title: completedOrder.receiptNumber,
+          text: `Receipt ${completedOrder.receiptNumber} — ${formatINR(completedOrder.total)}`,
+        });
+      } else {
+        // Fallback: just download it, since a wa.me link can't attach a file directly.
+        doc.save(`${completedOrder.receiptNumber}.pdf`);
+        toast.success("PDF downloaded — attach it in WhatsApp manually.");
+      }
+    } catch (err) {
+      // AbortError fires when the user cancels the native share sheet — not a real error.
+      if (err instanceof Error && err.name !== "AbortError") {
+        toast.error("Couldn't share the PDF.");
+      }
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   if (completedOrder) {
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const receiptUrl = `${siteUrl}/receipt/${completedOrder._id}`;
@@ -232,13 +353,27 @@ export default function BillingCounter() {
             >
               🖨️ Print receipt
             </button>
+            <button
+              onClick={downloadReceiptPdf}
+              disabled={generatingPdf}
+              className="rounded-full border border-line py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2 disabled:opacity-60"
+            >
+              ⬇️ Download PDF
+            </button>
+            <button
+              onClick={shareReceiptPdf}
+              disabled={generatingPdf}
+              className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
+            >
+              📄 Share receipt as PDF
+            </button>
             {customerPhone && (
                <a href={whatsappShareUrl(customerPhone, `Here's your receipt from us: ${receiptUrl}`)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90"
+                className="rounded-full border border-line py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2"
               >
-                💬 Share on WhatsApp
+                💬 Share link on WhatsApp
               </a>
             )}
             <Link
