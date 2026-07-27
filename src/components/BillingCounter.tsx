@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { jsPDF } from "jspdf";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QuickAddProductModal from "@/components/QuickAddProductModal";
-import { formatINR, whatsappShareUrl } from "@/lib/utils";
+import { formatINR } from "@/lib/utils";
 
 type DiscountType = "percent" | "flat";
 
@@ -299,37 +299,56 @@ export default function BillingCounter() {
     }
   }
 
-  async function shareReceiptPdf() {
+  // Normalizes whatever the merchant typed (spaces, dashes, brackets, an
+  // optional leading +) into digits-only, and assumes an Indian number
+  // (91) when no country code was entered. Adjust the default country
+  // code here if you operate outside India.
+  function normalizeWhatsappNumber(raw: string) {
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return null;
+    if (digits.length === 10) return `91${digits}`;
+    return digits;
+  }
+
+  async function shareReceiptPdfToCustomer() {
     if (!completedOrder) return;
+    const number = normalizeWhatsappNumber(customerPhone);
+    if (!number) {
+      toast.error("Enter the customer's WhatsApp number first.");
+      return;
+    }
+
     setGeneratingPdf(true);
     try {
+      // Open the chat with this exact number first — must happen
+      // synchronously in the click handler or the popup blocker eats it.
+      const text = `Hi${customerName ? " " + customerName : ""}, here's your receipt ${completedOrder.receiptNumber} for ${formatINR(
+        completedOrder.total
+      )}. I'm attaching the PDF now.`;
+      window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
+
       const doc = buildReceiptPdf(completedOrder);
       const blob = doc.output("blob");
       const file = new File([blob], `${completedOrder.receiptNumber}.pdf`, {
         type: "application/pdf",
       });
 
-      // Prefer the native share sheet (lets the user pick WhatsApp, etc.)
-      // when the browser supports sharing files.
+      // If the device share sheet can hand off a file, use it — the user
+      // picks WhatsApp again there and it lands as an attachment in the
+      // chat we just opened. Otherwise fall back to a plain download.
       if (
         typeof navigator !== "undefined" &&
         "canShare" in navigator &&
         navigator.canShare({ files: [file] })
       ) {
-        await navigator.share({
-          files: [file],
-          title: completedOrder.receiptNumber,
-          text: `Receipt ${completedOrder.receiptNumber} — ${formatINR(completedOrder.total)}`,
-        });
+        await navigator.share({ files: [file], title: completedOrder.receiptNumber });
       } else {
-        // Fallback: just download it, since a wa.me link can't attach a file directly.
         doc.save(`${completedOrder.receiptNumber}.pdf`);
-        toast.success("PDF downloaded — attach it in WhatsApp manually.");
+        toast.success("WhatsApp opened — attach the downloaded PDF from your files.");
       }
     } catch (err) {
-      // AbortError fires when the user cancels the native share sheet — not a real error.
       if (err instanceof Error && err.name !== "AbortError") {
-        toast.error("Couldn't share the PDF.");
+        toast.error("Couldn't prepare the PDF.");
       }
     } finally {
       setGeneratingPdf(false);
@@ -337,8 +356,6 @@ export default function BillingCounter() {
   }
 
   if (completedOrder) {
-    const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const receiptUrl = `${siteUrl}/receipt/${completedOrder._id}`;
     return (
       <div className="mx-auto max-w-md">
         <div className="receipt-edge-top receipt-edge-bottom border border-line bg-white p-7 text-center">
@@ -361,21 +378,13 @@ export default function BillingCounter() {
               ⬇️ Download PDF
             </button>
             <button
-              onClick={shareReceiptPdf}
-              disabled={generatingPdf}
+              onClick={shareReceiptPdfToCustomer}
+              disabled={generatingPdf || !customerPhone}
+              title={!customerPhone ? "Enter the customer's WhatsApp number first" : undefined}
               className="rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
             >
-              📄 Share receipt as PDF
+              💬 Share PDF on WhatsApp
             </button>
-            {customerPhone && (
-               <a href={whatsappShareUrl(customerPhone, `Here's your receipt from us: ${receiptUrl}`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full border border-line py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2"
-              >
-                💬 Share link on WhatsApp
-              </a>
-            )}
             <Link
              href={`/receipt/${completedOrder._id}`}
               target="_blank"
