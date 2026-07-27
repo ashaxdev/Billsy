@@ -320,29 +320,41 @@ export default function BillingCounter() {
 
     setGeneratingPdf(true);
     try {
-      // Open the chat with this exact number first — must happen
-      // synchronously in the click handler or the popup blocker eats it.
-      const text = `Hi${customerName ? " " + customerName : ""}, here's your receipt ${completedOrder.receiptNumber} for ${formatINR(
-        completedOrder.total
-      )}. I'm attaching the PDF now.`;
-      window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
-
       const doc = buildReceiptPdf(completedOrder);
       const blob = doc.output("blob");
       const file = new File([blob], `${completedOrder.receiptNumber}.pdf`, {
         type: "application/pdf",
       });
 
-      // If the device share sheet can hand off a file, use it — the user
-      // picks WhatsApp again there and it lands as an attachment in the
-      // chat we just opened. Otherwise fall back to a plain download.
-      if (
+      const canShareFile =
         typeof navigator !== "undefined" &&
         "canShare" in navigator &&
-        navigator.canShare({ files: [file] })
-      ) {
-        await navigator.share({ files: [file], title: completedOrder.receiptNumber });
+        navigator.canShare({ files: [file] });
+
+      // IMPORTANT: window.open() and navigator.share() each need to run on
+      // a fresh user gesture. Calling both in the same click handler makes
+      // the second call fail (the first one consumes the gesture), which
+      // is why sharing was erroring out. So we pick exactly one path here.
+      if (canShareFile) {
+        // Mobile path: hand the PDF straight to the share sheet. The user
+        // picks WhatsApp there and attaches the file themselves — we can't
+        // also auto-open the specific chat in this same action, so we put
+        // the target number in the shared text as a reminder.
+        await navigator.share({
+          files: [file],
+          title: completedOrder.receiptNumber,
+          text: `Receipt ${completedOrder.receiptNumber} for ${formatINR(
+            completedOrder.total
+          )}. Send this to ${number} on WhatsApp.`,
+        });
+        toast.success("Pick WhatsApp in the share sheet to send the PDF.");
       } else {
+        // Desktop / unsupported-browser path: open the exact chat, and
+        // download the PDF for the user to attach manually.
+        const text = `Hi${customerName ? " " + customerName : ""}, here's your receipt ${completedOrder.receiptNumber} for ${formatINR(
+          completedOrder.total
+        )}. I'm attaching the PDF now.`;
+        window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank");
         doc.save(`${completedOrder.receiptNumber}.pdf`);
         toast.success("WhatsApp opened — attach the downloaded PDF from your files.");
       }

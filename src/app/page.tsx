@@ -1,6 +1,11 @@
 import Link from "next/link";
 import BarcodeCanvas from "@/components/BarcodeCanvas";
 
+const SUPPORT_WHATSAPP_NUMBER = "919486350579"; // 91 + 9486350579
+const supportWhatsappUrl = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+  "Hi, I have a question about Billsy."
+)}`;
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-paper">
@@ -11,6 +16,14 @@ export default function Home() {
             Billsy
           </span>
           <nav className="flex items-center gap-3 sm:gap-5">
+            <a
+              href={supportWhatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden text-sm font-medium text-ink-2 hover:text-ink sm:inline"
+            >
+              Help &amp; Support
+            </a>
             <Link
               href="/login"
               className="hidden text-sm font-medium text-ink-2 hover:text-ink sm:inline"
@@ -225,9 +238,16 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-slate sm:flex-row">
           <span className="font-display font-semibold text-ink">Billsy</span>
           <p>Billing, barcodes, printing and receipts for small businesses.</p>
+          <a
+            href={supportWhatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-ink-2 underline decoration-line underline-offset-4 hover:text-ink"
+          >
+            Need help? Chat with us on WhatsApp
+          </a>
           <p>
             Developed by{" "}
-            
              <a href="https://www.nexirasolution.in"
               target="_blank"
               rel="noopener noreferrer"

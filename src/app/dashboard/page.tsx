@@ -48,6 +48,16 @@ export default async function DashboardHome() {
         >
           Add a product
         </Link>
+        <a
+          href={`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+            "Hi, I need some help with my billing account."
+          )}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink-2 hover:bg-paper-2"
+        >
+          Help &amp; Support
+        </a>
       </div>
 
       <div className="mt-10">
