@@ -14,6 +14,7 @@ interface Product {
   stock: number;
   category?: string;
   imageUrl?: string;
+  imagePublicId?: string;
   barcode: string;
 }
 
@@ -22,6 +23,7 @@ export default function ProductManager() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [printing, setPrinting] = useState(false);
 
@@ -156,12 +158,20 @@ export default function ProductManager() {
                   <p className="font-data text-sm text-signal">{formatINR(p.price)}</p>
                   <p className="text-xs text-slate">Stock: {p.stock}</p>
                 </div>
-                <button
-                  onClick={() => handleDelete(p._id)}
-                  className="h-fit shrink-0 rounded-md px-2 py-1 text-xs text-danger hover:bg-danger/10"
-                >
-                  Remove
-                </button>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <button
+                    onClick={() => setEditingProduct(p)}
+                    className="h-fit rounded-md px-2 py-1 text-xs text-ink-2 hover:bg-paper-2"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(p._id)}
+                    className="h-fit rounded-md px-2 py-1 text-xs text-danger hover:bg-danger/10"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
               <div className="mt-3 flex flex-col items-center rounded-lg bg-paper-2/60 py-2">
                 <BarcodeCanvas value={p.barcode} height={40} width={1.5} fontSize={10} />
@@ -174,9 +184,20 @@ export default function ProductManager() {
       {showForm && (
         <ProductFormModal
           onClose={() => setShowForm(false)}
-          onCreated={(product) => {
+          onSaved={(product) => {
             setProducts((p) => [product, ...p]);
             setShowForm(false);
+          }}
+        />
+      )}
+
+      {editingProduct && (
+        <ProductFormModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSaved={(product) => {
+            setProducts((p) => p.map((x) => (x._id === product._id ? product : x)));
+            setEditingProduct(null);
           }}
         />
       )}
@@ -192,24 +213,30 @@ export default function ProductManager() {
 }
 
 function ProductFormModal({
+  product,
   onClose,
-  onCreated,
+  onSaved,
 }: {
+  product?: Product;
   onClose: () => void;
-  onCreated: (p: Product) => void;
+  onSaved: (p: Product) => void;
 }) {
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [stock, setStock] = useState("");
-  const [category, setCategory] = useState("");
-  const [barcode, setBarcode] = useState("");
+  const isEditing = !!product;
+
+  const [name, setName] = useState(product?.name ?? "");
+  const [price, setPrice] = useState(product ? String(product.price) : "");
+  const [stock, setStock] = useState(product ? String(product.stock) : "");
+  const [category, setCategory] = useState(product?.category ?? "");
+  const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(product?.imageUrl ?? null);
+  const [imageChanged, setImageChanged] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function handleFile(file: File | null) {
     setImageFile(file);
+    setImageChanged(true);
     if (file) {
       const reader = new FileReader();
       reader.onload = () => setImagePreview(reader.result as string);
@@ -227,11 +254,12 @@ function ProductFormModal({
     }
     setSaving(true);
 
-    let imageUrl: string | undefined;
-    let imagePublicId: string | undefined;
+    let imageUrl: string | undefined = product?.imageUrl;
+    let imagePublicId: string | undefined = product?.imagePublicId;
 
     try {
-      if (imagePreview) {
+      // Only re-upload if the user picked a new image (or cleared it) in edit mode.
+      if (imageChanged && imagePreview) {
         const uploadRes = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -241,28 +269,36 @@ function ProductFormModal({
         if (!uploadRes.ok) throw new Error(uploadData.error);
         imageUrl = uploadData.url;
         imagePublicId = uploadData.publicId;
+      } else if (imageChanged && !imagePreview) {
+        imageUrl = undefined;
+        imagePublicId = undefined;
       }
 
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          price: parseFloat(price),
-          stock: stock ? parseInt(stock) : 0,
-          category: category || undefined,
-          imageUrl,
-          imagePublicId,
-          barcode: barcode.trim() || undefined, // blank → server auto-generates
-        }),
-      });
+      const payload = {
+        name,
+        price: parseFloat(price),
+        stock: stock ? parseInt(stock) : 0,
+        category: category || undefined,
+        imageUrl,
+        imagePublicId,
+        barcode: barcode.trim() || undefined,
+      };
+
+      const res = await fetch(
+        isEditing ? `/api/products/${product!._id}` : "/api/products",
+        {
+          method: isEditing ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      toast.success(barcode.trim() ? "Product added with scanned barcode" : "Product added with a new barcode");
-      onCreated(data.product);
+      toast.success(isEditing ? "Product updated" : barcode.trim() ? "Product added with scanned barcode" : "Product added with a new barcode");
+      onSaved(data.product);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add product");
+      toast.error(err instanceof Error ? err.message : "Could not save product");
     } finally {
       setSaving(false);
     }
@@ -272,7 +308,9 @@ function ProductFormModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-sm sm:items-center">
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-paper p-6 sm:rounded-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-ink">Add product</h2>
+          <h2 className="font-display text-lg font-bold text-ink">
+            {isEditing ? "Edit product" : "Add product"}
+          </h2>
           <button onClick={onClose} className="text-sm text-slate hover:text-ink">
             Close
           </button>
@@ -280,7 +318,7 @@ function ProductFormModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate">
-              Barcode (optional)
+              Barcode {isEditing ? "" : "(optional)"}
             </label>
             <div className="flex gap-2">
               <input
@@ -319,6 +357,15 @@ function ProductFormModal({
                 onChange={(e) => handleFile(e.target.files?.[0] || null)}
                 className="text-sm"
               />
+              {isEditing && imagePreview && (
+                <button
+                  type="button"
+                  onClick={() => handleFile(null)}
+                  className="text-xs text-danger underline"
+                >
+                  Remove photo
+                </button>
+              )}
             </div>
           </div>
           <div>
@@ -379,7 +426,7 @@ function ProductFormModal({
             disabled={saving}
             className="w-full rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save product"}
+            {saving ? "Saving…" : isEditing ? "Save changes" : "Save product"}
           </button>
         </form>
       </div>
