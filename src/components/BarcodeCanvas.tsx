@@ -16,15 +16,15 @@ export default function BarcodeCanvas({
   fontSize?: number;
   className?: string;
 }) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current || !value) return;
+    if (!canvasRef.current || !value) return;
     try {
-      JsBarcode(svgRef.current, value, {
+      JsBarcode(canvasRef.current, value, {
         format: "CODE128",
         lineColor: "#16202b",
-        background: "transparent",
+        background: "#ffffff",
         width,
         height,
         fontSize,
@@ -37,5 +37,11 @@ export default function BarcodeCanvas({
     }
   }, [value, height, width, fontSize]);
 
-  return <svg ref={svgRef} className={className} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className={className}
+      style={{ maxWidth: "100%", height: "auto" }}
+    />
+  );
 }

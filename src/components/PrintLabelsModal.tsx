@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import BarcodeCanvas from "@/components/BarcodeCanvas";
 import { formatINR } from "@/lib/utils";
 
@@ -24,6 +24,8 @@ const SIZE_CONFIG: Record<
     gridCols: string;
     padding: string;
     nameSize: string;
+    nameLineHeight: string;
+    nameMinHeight: string;
     priceSize: string;
   }
 > = {
@@ -36,6 +38,8 @@ const SIZE_CONFIG: Record<
     gridCols: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
     padding: "px-1.5 py-2",
     nameSize: "text-[10px]",
+    nameLineHeight: "leading-[13px]",
+    nameMinHeight: "min-h-[26px]",
     priceSize: "text-[11px]",
   },
   medium: {
@@ -47,6 +51,8 @@ const SIZE_CONFIG: Record<
     gridCols: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
     padding: "px-2 py-3",
     nameSize: "text-[11px]",
+    nameLineHeight: "leading-[15px]",
+    nameMinHeight: "min-h-[30px]",
     priceSize: "text-xs",
   },
   large: {
@@ -58,6 +64,8 @@ const SIZE_CONFIG: Record<
     gridCols: "grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2",
     padding: "px-3 py-4",
     nameSize: "text-sm",
+    nameLineHeight: "leading-[19px]",
+    nameMinHeight: "min-h-[38px]",
     priceSize: "text-sm",
   },
 };
@@ -71,9 +79,141 @@ export default function PrintLabelsModal({
 }) {
   const [copiesPerProduct, setCopiesPerProduct] = useState("1");
   const [labelSize, setLabelSize] = useState<LabelSize>("medium");
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+
   const copies = Math.max(1, parseInt(copiesPerProduct) || 1);
   const labels = products.flatMap((p) => Array.from({ length: copies }, () => p));
   const cfg = SIZE_CONFIG[labelSize];
+
+  async function handleDownloadPDF() {
+    if (!printAreaRef.current || products.length === 0 || isGeneratingPDF) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const node = printAreaRef.current;
+      const originalGridTemplate = node.style.gridTemplateColumns;
+      node.style.gridTemplateColumns = `repeat(${cfg.printColumns}, 1fr)`;
+
+      // Wait for all fonts to finish loading — html2canvas will otherwise
+      // substitute a fallback font mid-capture and clip text that was
+      // measured/laid out against the real font's metrics.
+      await document.fonts.ready;
+
+      // Let layout settle after forcing the grid columns
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      // Measure each label's top/bottom (in CSS px, relative to the container)
+      // so we can find safe row-boundary cut points and never slice through a label.
+      const nodeRect = node.getBoundingClientRect();
+      const children = Array.from(node.children) as HTMLElement[];
+      const rects = children.map((child) => {
+        const r = child.getBoundingClientRect();
+        return { top: r.top - nodeRect.top, bottom: r.bottom - nodeRect.top };
+      });
+
+      // Group into rows (items with ~same top belong to the same row),
+      // with a small safety margin so a page cut never grazes text.
+      const ROW_SAFETY_PX = 4;
+      const rowBottoms: number[] = [];
+      let lastTop = -Infinity;
+      for (const r of rects) {
+        if (Math.abs(r.top - lastTop) > 2) {
+          rowBottoms.push(r.bottom + ROW_SAFETY_PX);
+          lastTop = r.top;
+        } else {
+          rowBottoms[rowBottoms.length - 1] = Math.max(
+            rowBottoms[rowBottoms.length - 1],
+            r.bottom + ROW_SAFETY_PX
+          );
+        }
+      }
+
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+      });
+
+      node.style.gridTemplateColumns = originalGridTemplate;
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidthMm = pdf.internal.pageSize.getWidth();
+      const pageHeightMm = pdf.internal.pageSize.getHeight();
+
+      // px-per-mm derived from the actual captured canvas vs the CSS width of the node
+      const scaleFactor = canvas.width / nodeRect.width;
+      const pxPerMm = canvas.width / pageWidthMm;
+      const pageHeightPx = pageHeightMm * pxPerMm;
+
+      // Convert row-bottom CSS px to canvas px
+      const rowBoundariesPx = rowBottoms.map((b) => b * scaleFactor);
+
+      let cutStart = 0;
+      let first = true;
+
+      while (cutStart < canvas.height - 1) {
+        const maxCut = cutStart + pageHeightPx;
+
+        // Pick the furthest row boundary that still fits on this page
+        let cutEnd = 0;
+        for (const b of rowBoundariesPx) {
+          if (b > cutStart && b <= maxCut) cutEnd = b;
+        }
+        // Fallback: no row fits (a single row taller than a page) — hard cut
+        if (cutEnd <= cutStart) cutEnd = Math.min(maxCut, canvas.height);
+        // Last page: don't overshoot the canvas
+        cutEnd = Math.min(cutEnd, canvas.height);
+
+        const sliceHeightPx = cutEnd - cutStart;
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+        const ctx = pageCanvas.getContext("2d");
+
+        if (ctx) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          ctx.drawImage(
+            canvas,
+            0,
+            cutStart,
+            canvas.width,
+            sliceHeightPx,
+            0,
+            0,
+            canvas.width,
+            sliceHeightPx
+          );
+        }
+
+        const imgData = pageCanvas.toDataURL("image/png", 1.0);
+        const sliceHeightMm = sliceHeightPx / pxPerMm;
+
+        if (!first) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, 0, pageWidthMm, sliceHeightMm);
+
+        cutStart = cutEnd;
+        first = false;
+      }
+
+      pdf.save(`labels-${labelSize}-${Date.now()}.pdf`);
+    } catch (err) {
+      console.error("Failed to generate labels PDF", err);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ink/40 backdrop-blur-sm">
@@ -118,13 +258,20 @@ export default function PrintLabelsModal({
               />
             </label>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
               <button
                 onClick={() => window.print()}
                 disabled={products.length === 0}
                 className="w-full rounded-full bg-signal px-4 py-2 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-50 sm:w-auto"
               >
                 Print
+              </button>
+              <button
+                onClick={handleDownloadPDF}
+                disabled={products.length === 0 || isGeneratingPDF}
+                className="w-full rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-paper-2 disabled:opacity-50 sm:w-auto"
+              >
+                {isGeneratingPDF ? "Generating…" : "Download PDF"}
               </button>
               <button
                 onClick={onClose}
@@ -142,16 +289,26 @@ export default function PrintLabelsModal({
           <p className="text-center text-sm text-slate">No products selected.</p>
         ) : (
           <div
+            ref={printAreaRef}
             className={`print-area mx-auto grid max-w-4xl gap-2.5 rounded-xl bg-white p-3 sm:gap-3 sm:p-4 ${cfg.gridCols}`}
           >
             {labels.map((p, i) => (
               <div
                 key={`${p._id}-${i}`}
-                className={`flex min-w-0 flex-col items-center gap-1 rounded-lg border border-line text-center ${cfg.padding}`}
+                className={`flex min-w-0 flex-col items-center gap-1.5 rounded-lg border border-line text-center ${cfg.padding}`}
                 style={{ breakInside: "avoid" }}
               >
-                <p className={`w-full truncate font-semibold text-ink ${cfg.nameSize}`}>{p.name}</p>
-                <div className="flex w-full justify-center overflow-hidden">
+                <p
+                  className={`flex w-full items-center justify-center overflow-hidden font-semibold text-ink ${cfg.nameSize} ${cfg.nameLineHeight} ${cfg.nameMinHeight}`}
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {p.name}
+                </p>
+                <div className="flex w-full justify-center overflow-visible">
                   <BarcodeCanvas
                     value={p.barcode}
                     height={cfg.barcodeHeight}
@@ -160,7 +317,9 @@ export default function PrintLabelsModal({
                     className="max-w-full"
                   />
                 </div>
-                <p className={`font-data font-bold text-ink ${cfg.priceSize}`}>{formatINR(p.price)}</p>
+                <p className={`font-data font-bold text-ink leading-normal pb-0.5 ${cfg.priceSize}`}>
+                  {formatINR(p.price)}
+                </p>
               </div>
             ))}
           </div>
