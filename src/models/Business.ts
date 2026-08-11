@@ -13,6 +13,9 @@ export interface IBusiness {
   logoUrl?: string;
   address?: string;
   defaultTaxPercent: number;
+  defaultDiscountType: "percent" | "flat";
+  defaultDiscountValue: number;
+  fssaiNumber?: string;
   trialEndsAt?: Date;
   plan: {
     tier: "free" | "pro";
@@ -73,6 +76,21 @@ const BusinessSchema = new Schema<IBusiness>(
       default: 0,
       min: 0,
       max: 100,
+    },
+    defaultDiscountType: {
+      type: String,
+      enum: ["percent", "flat"],
+      default: "percent",
+    },
+    defaultDiscountValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    fssaiNumber: {
+      type: String,
+      default: "",
+      trim: true,
     },
     trialEndsAt: {
       type: Date,

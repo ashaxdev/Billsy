@@ -46,6 +46,8 @@ export default function BillingCounter() {
   const [defaultTaxPercent, setDefaultTaxPercent] = useState("0");
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>("percent");
   const [billDiscountValue, setBillDiscountValue] = useState("0");
+  const [defaultDiscountType, setDefaultDiscountType] = useState<DiscountType>("percent");
+  const [defaultDiscountValue, setDefaultDiscountValue] = useState("0");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "other">("cash");
@@ -53,7 +55,7 @@ export default function BillingCounter() {
   const [completedOrder, setCompletedOrder] = useState<CreatedOrder | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch the business's saved default tax % and prefill the bill with it.
+  // Fetch the business's saved defaults (tax % + discount) and prefill the bill with them.
   useEffect(() => {
     (async () => {
       try {
@@ -65,9 +67,18 @@ export default function BillingCounter() {
             setDefaultTaxPercent(val);
             setTaxPercent(val);
           }
+          if (data.defaultDiscountType === "percent" || data.defaultDiscountType === "flat") {
+            setDefaultDiscountType(data.defaultDiscountType);
+            setBillDiscountType(data.defaultDiscountType);
+          }
+          if (typeof data.defaultDiscountValue === "number") {
+            const val = String(data.defaultDiscountValue);
+            setDefaultDiscountValue(val);
+            setBillDiscountValue(val);
+          }
         }
       } catch {
-        // if settings fetch fails, just fall back to 0 — non-fatal
+        // if settings fetch fails, just fall back to defaults — non-fatal
       }
     })();
   }, []);
@@ -198,8 +209,8 @@ export default function BillingCounter() {
     setCustomerName("");
     setCustomerPhone("");
     setTaxPercent(defaultTaxPercent);
-    setBillDiscountType("percent");
-    setBillDiscountValue("0");
+    setBillDiscountType(defaultDiscountType);
+    setBillDiscountValue(defaultDiscountValue);
     setCompletedOrder(null);
   }
 
@@ -261,7 +272,7 @@ export default function BillingCounter() {
   }
 
   return (
-    <div>
+    <div className="pb-24 lg:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">Bill now</h1>
@@ -294,8 +305,8 @@ export default function BillingCounter() {
                 }}
                 className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm hover:bg-paper-2"
               >
-                <span>{p.name}</span>
-                <span className="font-data text-signal">{formatINR(p.price)}</span>
+                <span className="truncate">{p.name}</span>
+                <span className="font-data ml-3 shrink-0 text-signal">{formatINR(p.price)}</span>
               </button>
             ))}
           </div>
@@ -313,32 +324,32 @@ export default function BillingCounter() {
               {cart.map((item) => {
                 const discAmt = lineDiscountAmount(item);
                 return (
-                  <li key={item.barcode} className="flex flex-col gap-2 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
+                  <li key={item.barcode} className="flex flex-col gap-2 px-3 py-3 sm:px-4">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                      <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                         <p className="truncate text-sm font-medium text-ink">{item.name}</p>
                         <p className="font-data text-xs text-slate">{formatINR(item.price)} each</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => updateQty(item.barcode, -1)}
-                          className="h-7 w-7 rounded-full border border-line text-sm hover:bg-paper-2"
+                          className="h-8 w-8 shrink-0 rounded-full border border-line text-sm hover:bg-paper-2 sm:h-7 sm:w-7"
                         >
                           −
                         </button>
                         <span className="font-data w-5 text-center text-sm">{item.qty}</span>
                         <button
                           onClick={() => updateQty(item.barcode, 1)}
-                          className="h-7 w-7 rounded-full border border-line text-sm hover:bg-paper-2"
+                          className="h-8 w-8 shrink-0 rounded-full border border-line text-sm hover:bg-paper-2 sm:h-7 sm:w-7"
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-data w-20 shrink-0 text-right text-sm font-semibold text-ink">
+                      <span className="font-data ml-auto shrink-0 text-right text-sm font-semibold text-ink sm:ml-0 sm:w-20">
                         {formatINR(item.price * item.qty - discAmt)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 pl-0.5">
+                    <div className="flex flex-wrap items-center gap-2 pl-0.5">
                       <span className="text-[11px] text-slate">Discount</span>
                       <select
                         value={item.discountType}
@@ -367,7 +378,7 @@ export default function BillingCounter() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-line bg-white p-5">
+        <div className="rounded-2xl border border-line bg-white p-4 sm:p-5">
           <div className="space-y-3">
             <input
               value={customerName}
@@ -406,7 +417,7 @@ export default function BillingCounter() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <input
                 type="number"
                 min="0"
@@ -418,7 +429,7 @@ export default function BillingCounter() {
               <select
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value as typeof paymentMode)}
-                className="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
+                className="min-w-[8rem] flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-ink"
               >
                 <option value="cash">Cash</option>
                 <option value="upi">UPI</option>
@@ -458,11 +469,26 @@ export default function BillingCounter() {
           <button
             onClick={handleCheckout}
             disabled={checkingOut}
-            className="mt-5 w-full rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
+            className="mt-5 hidden w-full rounded-full bg-signal py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60 lg:block"
           >
             {checkingOut ? "Generating receipt…" : "Generate receipt"}
           </button>
         </div>
+      </div>
+
+      {/* Mobile-only sticky checkout bar so you don't have to scroll to finish the sale */}
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-white px-4 py-3 shadow-[0_-10px_25px_-15px_rgba(22,32,43,0.35)] lg:hidden">
+        <div className="font-data min-w-0 flex-1">
+          <p className="text-[11px] uppercase tracking-wide text-slate">Total</p>
+          <p className="truncate text-lg font-bold text-ink">{formatINR(total)}</p>
+        </div>
+        <button
+          onClick={handleCheckout}
+          disabled={checkingOut}
+          className="shrink-0 rounded-full bg-signal px-6 py-2.5 text-sm font-semibold text-paper hover:opacity-90 disabled:opacity-60"
+        >
+          {checkingOut ? "Generating…" : "Generate receipt"}
+        </button>
       </div>
 
       {scanning && (
@@ -470,7 +496,7 @@ export default function BillingCounter() {
           <BarcodeScanner onScan={(value) => handleScan(value)} onClose={() => setScanning(false)} />
 
           {/* Live receipt — bottom half, updates instantly as items are scanned */}
-          <div className="fixed inset-x-0 bottom-0 z-50 flex h-[42vh] flex-col rounded-t-2xl border-t border-line bg-white shadow-[0_-15px_35px_-20px_rgba(22,32,43,0.4)] sm:h-[38vh]">
+          <div className="fixed inset-x-0 bottom-0 z-50 flex h-[45vh] flex-col rounded-t-2xl border-t border-line bg-white shadow-[0_-15px_35px_-20px_rgba(22,32,43,0.4)] sm:h-[38vh]">
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <span className="font-display text-sm font-semibold text-ink">
                 Current bill
@@ -496,27 +522,27 @@ export default function BillingCounter() {
               ) : (
                 <ul className="divide-y divide-line">
                   {cart.map((item) => (
-                    <li key={item.barcode} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <li key={item.barcode} className="flex items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-ink">{item.name}</p>
                         <p className="font-data text-xs text-slate">{formatINR(item.price)} each</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <button
                           onClick={() => updateQty(item.barcode, -1)}
-                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
+                          className="h-7 w-7 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
                         >
                           −
                         </button>
                         <span className="font-data w-4 text-center text-sm">{item.qty}</span>
                         <button
                           onClick={() => updateQty(item.barcode, 1)}
-                          className="h-6 w-6 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
+                          className="h-7 w-7 shrink-0 rounded-full border border-line text-xs hover:bg-paper-2"
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-data w-16 shrink-0 text-right text-sm font-semibold text-ink">
+                      <span className="font-data w-14 shrink-0 text-right text-sm font-semibold text-ink sm:w-16">
                         {formatINR(item.price * item.qty - lineDiscountAmount(item))}
                       </span>
                     </li>

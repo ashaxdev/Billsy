@@ -26,7 +26,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
   if (!order) notFound();
 
   const business = await Business.findById(order.businessId)
-    .select("businessName address phone")
+    .select("businessName address phone fssaiNumber")
     .lean();
 
   return (
@@ -38,6 +38,9 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
               {business?.businessName || "Receipt"}
             </p>
             {business?.address && <p className="mt-0.5 text-xs text-slate">{business.address}</p>}
+            {business?.fssaiNumber && (
+              <p className="mt-0.5 text-[11px] text-slate">FSSAI: {business.fssaiNumber}</p>
+            )}
             <p className="font-data mt-1 text-[11px] text-slate">
               {order.receiptNumber} &middot;{" "}
               {new Date(order.createdAt).toLocaleString("en-IN", {
@@ -77,6 +80,18 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
               <span>Subtotal</span>
               <span>{formatINR(order.subtotal)}</span>
             </div>
+            {order.itemDiscountsTotal > 0 && (
+              <div className="flex justify-between text-signal">
+                <span>Item discounts</span>
+                <span>−{formatINR(order.itemDiscountsTotal)}</span>
+              </div>
+            )}
+            {order.billDiscountAmount > 0 && (
+              <div className="flex justify-between text-signal">
+                <span>Bill discount</span>
+                <span>−{formatINR(order.billDiscountAmount)}</span>
+              </div>
+            )}
             {order.taxAmount > 0 && (
               <div className="flex justify-between">
                 <span>Tax ({order.taxPercent}%)</span>
@@ -102,8 +117,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           Generated with Billsy — billing for small businesses.
           <br />
           Developed by{" "}
-          <a
-            href="https://www.nexirasolution.in"
+          
+          <a  href="https://www.nexirasolution.in"
             target="_blank"
             rel="noopener noreferrer"
             className="font-medium text-ink-2 underline decoration-line underline-offset-4 hover:text-ink"
